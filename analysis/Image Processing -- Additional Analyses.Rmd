@@ -1,0 +1,288 @@
+---
+title: "Image Processing:  Additional Analyses"
+author: "Kelsey Chen, Sarah Mastiur, Mia Xue"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/kelsey/Desktop/APAN5902GP5")
+```
+
+```{r seed}
+set.seed(41)
+```
+
+```{r libraries}
+library(data.table)
+library(DT)
+
+library(ggplot2)
+#install.packages('Rtsne')
+library(Rtsne)
+library(dplyr)
+library(reshape2)
+library(viridis)
+
+library(reshape2)
+library(viridis)
+library(gridExtra)
+
+```
+
+```{r constants}
+source("R/additional_analysis_kelsey.R")
+source("R/functions_mia.R")
+source("R/additional_analysis_pixel_intensity.R")
+```
+
+```{r functions}
+round.numerics <- function(x, digits){
+  if(is.numeric(x)){
+    x <- round(x = x, digits = digits)
+  }
+  return(x)
+}
+```
+
+```{r load_data}
+dat_test = fread("Data/MNIST-fashion testing set-49.csv")
+dat_train = fread("Data/MNIST-fashion training set-49.csv")
+
+```
+
+```{r explore_data, eval = FALSE}
+
+```
+
+
+```{r clean_data}
+
+```
+
+# {.tabset}
+
+## Predictive Accuracy by Product
+
+This section aims to investigate the model’s prediction performance across different individual sub-categories. To quantify the performance results, we implemented accuracy rate metrics, which represent the proportion of correct predictions out of the total count for each product category. We believe our clients would benefit from these results because they reveal the strengths and weaknesses of the model in predicting different products, and they also provide useful insights for feature engineering and model tuning. In the long run, we hope to improve the machine learning model so that it becomes more accurate in classifying all product categories.
+
+
+```{r p1}
+# check which is the best model 
+scoreboard = read.csv("Results/scoreboard_final.csv")
+# class(scoreboard)
+# head(scoreboard)
+best_model <- scoreboard[which.min(scoreboard$Points), ]
+best_model
+```
+
+```{r p2}
+# products_train = unique(dat_train$label)
+# products_test = unique(dat_test$label)
+
+# products_test 
+# products_train
+# setequal(products_train,products_test)
+
+products = c("T-shirt/top","Trouser", "Pullover", "Dress" , "Coat" ,      
+ "Sandal", "Shirt",  "Sneaker", "Bag", "Ankle boot")
+```
+
+```{r p3}
+results_svm <- readRDS("Results/results_svm.rds")
+
+best_results =results_svm[sample_size == 2000]
+product_accuracy <- calculate_product_accuracy(best_results, products)
+product_accuracy<- setorder(product_accuracy, -accuracy)
+
+datatable(product_accuracy)
+
+
+product_accuracy$accuracy_num <- as.numeric(sub("%", "", product_accuracy$accuracy))
+
+ggplot(product_accuracy, aes(x = reorder(product,accuracy_num), y = accuracy_num, fill = product)) +
+  geom_col() +
+  scale_fill_viridis(discrete = TRUE, option = "viridis") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Accuracy Distribution of Clothing Categories",
+    x = "Category",
+    y = "Prediction Accuracy",
+    fill = "Category"
+  )
+
+```
+
+```{r P4}
+
+Pullover_mis = calculate_misclassification(best_results, products= "Pullover")
+datatable(Pullover_mis)
+
+Pullover_mis$percentage_num <- as.numeric(sub("%", "", Pullover_mis$percentage))
+
+ggplot(Pullover_mis, aes(x = reorder(predicted_label,percentage_num), y = percentage_num , fill = predicted_label)) +
+  geom_col() +
+  scale_fill_viridis(discrete = TRUE, option = "viridis") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Misclassification Rate Distribution of Clothing Categories",
+    x = "Category",
+    y = "Misclassification Rate",
+    fill = "Category"
+  )
+
+```
+
+```{r P5}
+
+Shirt_mis = calculate_misclassification(best_results, products= "Shirt")
+datatable(Shirt_mis)
+
+Shirt_mis$percentage_num <- as.numeric(sub("%", "", Shirt_mis$percentage))
+
+ggplot(Shirt_mis, aes(x = reorder(predicted_label,percentage_num), y = percentage_num , fill = predicted_label)) +
+  geom_col() +
+  scale_fill_viridis(discrete = TRUE, option = "viridis") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Misclassification Rate Distribution of Clothing Categories",
+    x = "Category",
+    y = "Misclassification Rate",
+    fill = "Category"
+  )
+
+
+```
+
+According to the scoreboard results, the top-performing model with the lowest points is the Support Vector Machine (SVM) model trained on the 2,000-sample dataset. To further investigate its practical usefulness, we examined the accuracy of the model across individual product categories using the calculate_product_accuracy() function defined in functions.R.
+
+Overall, the SVM model performed well in classifying most product categories. In particular, it achieved over 90% accuracy for Bag, Trouser, and Ankle Boot, indicating highly reliable prediction capabilities for these product categories. The model also showed moderately strong performance for Sandal, Sneaker, Dress, and T-shirt/Top, with accuracy rates between 80% and 90%, suggesting dependable predictions across these categories.
+
+However, performance decreases noticeably for Pullover and especially for Shirt. Shirt’s accuracy is below 40%, indicating that the model struggles to differentiate Shirt from other visually similar products. To further examine the misclassification details, we applied the calculate_misclassification() function. The results show that approximately 50% of Pullover errors were predicted as Coat, and around 40% of Shirt errors were predicted as T-shirt/Top.
+
+In our current setup, the SVM model relies primarily on brightness features. However, these results show that brightness alone is not sufficient for distinguishing visually similar product category pairs, such as coat—pullover and t-shirt/top—shirt, because many items share similar and overlapping grayscale patterns. To further improve classification accuracy, we would need to incorporate additional feature types, such as shape, silhouette structure, edge patterns, and height/width ratios. With these features, we would be able to capture the geometric differences that brightness alone cannot represent, so that the model can better separate product categories that are similar in grayscale.
+
+## Independent Investigation 1
+
+### Question 1: Which Clothing Categories Are Most Visually Similar or Overlapping?
+
+### Goal
+To identify which types of clothing (e.g., Shirt, Pullover, Coat, Sandal) are visually similar based on their grayscale pixel patterns.
+This helps reveal where the boundaries between categories are “blurry” — both from a computer vision and a fashion perspective.
+
+### Why this matters (client value):
+For a fashion retailer or AI product-tagging system, this insight is valuable because:
+If the model confuses Shirts and T-Shirts, that might reflect true visual similarity — meaning the client’s catalog may benefit from clearer labeling or consistent photography.
+It helps the client understand product overlap — some categories might be too similar for an automated model to distinguish without extra context.
+It can highlight opportunities for visual differentiation — e.g., capturing side or back angles, or improving lighting to emphasize distinctive features.
+Essentially, this question bridges model interpretability with business insight.
+
+```{r Independent_Investigation_1}
+visual_similarity_analysis("Data/MNIST-fashion training set-49.csv")
+
+```
+
+### Distribution of Clothing Categories:
+The dataset includes ten balanced clothing categories — T-shirt/top, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, and Ankle boot — each with roughly the same number of images. As shown in the bar chart, no single category dominates, ensuring that model training is unbiased across classes. This balanced structure is ideal for classification tasks, as it prevents skewed model performance due to overrepresented items.
+
+### PCA Projection -- Broad Feature Separation:
+The PCA projection reduces all 49 image features into two main dimensions, offering a simplified view of visual relationships. Some categories, such as Trousers and T-shirts/Tops, appear well separated, indicating distinct pixel-level patterns that models can easily recognize. However, Shirts, Pullovers, and Coats overlap heavily, reflecting their similar shapes and textures. This overlap suggests why models may struggle to distinguish between these upper-body garments, as they share subtle design similarities like sleeves and collars.
+
+### t-SNE Visualization -- Fine-Grained Clustering:
+The t-SNE plot provides a more detailed, non-linear perspective on how items cluster by visual similarity. It highlights tight, distinct clusters for Trousers and Ankle boots, confirming that they have unique visual profiles. In contrast, categories like Shirts, Pullovers, and Coats remain closely packed, reinforcing that these sections are visually similar even in high-dimensional space. Footwear items such as Sneakers and Sandals show moderate overlap, likely because of shared structural elements like soles and straps. For the client, this finding suggests that classification accuracy could be improved by focusing on these overlapping groups through specialized preprocessing or deeper image representations.
+
+### Visual Similarity Heatmap -- Quantifying Overlaps
+The Euclidean distance heatmap quantifies how visually similar each category is to the others. Darker cells indicate stronger similarity. As expected, the darkest regions appear between Shirts, Pullovers, and Coats, confirming their close resemblance. Meanwhile, lighter regions around Trousers and Ankle boots show they are visually distinct from most other categories. This aligns with both PCA and t-SNE findings and provides a clear, numerical basis for prioritizing which classes may need targeted improvements.
+
+### Conclusion:
+Overall, this analysis reveals that while the Fashion-MNIST dataset is well-balanced and includes several clearly defined clothing types, a few categories exhibit significant visual overlap that can complicate classification. For the client, these findings highlight the importance of refining image preprocessing and possibly employing deep learning models that can better capture subtle textural and shape-based differences. Addressing these overlaps would help enhance both model accuracy and the reliability of visual search or recommendation systems built from this dataset.
+
+
+## Independent Investigation 2
+
+### Question 1: How Do Pixel Intensity Characteristics Differ Across Clothing Categories?
+
+### Goal
+
+To examine the grayscale pixel intensity patterns of different clothing categories and identify which items are inherently darker or lighter, and which have more consistent or variable appearance. This analysis reveals whether certain product types have distinctive intensity signatures that could be leveraged for improved classification or preprocessing.
+
+### Why this matters (client value):
+
+For a fashion AI system, understanding pixel intensity patterns is valuable because:
+
+1. **Preprocessing Optimization**: Knowing that certain categories are uniformly dark or light can inform normalization strategies and help models focus on shape rather than lighting artifacts.
+
+2. **Image Quality Assessment**: High variance in pixel intensity within a category might indicate inconsistent photography or product lighting, which the client can address through standardized photo shoots.
+
+3. **Product Differentiation**: Intensity patterns reveal natural visual characteristics (e.g., sandals are inherently lighter because they have more background/whitespace), which can inform feature engineering strategies.
+
+
+```{r Independent_Investigation_2, message=FALSE}
+pixel_stats <- pixel_intensity_analysis("Data/MNIST-fashion training set-49.csv")
+```
+
+### Key Findings:
+
+#### Plot 1: Average Pixel Intensity Distribution
+
+The first visualization reveals substantial differences in average pixel intensity across clothing categories. Items like **Trousers and Sneakers** show the highest average intensity (darker pixels), reflecting their naturally darker colors and dense material appearance in 7×7 pixel format. In contrast, **Sandals and Bags** display lower average intensity (lighter pixels), likely due to the increased background whitespace and lighter color schemes typical of these items. **Shirts and Pullovers** occupy the middle range, suggesting a blend of fabric coverage and color distribution.
+
+**Business Insight**: These intensity differences are NOT noise, they reflect genuine product characteristics. Models trained on this data might inadvertently learn "darkness" as a proxy for certain categories (e.g., "dark = trouser"), which could cause misclassification if lighting conditions change in production photography. The client should consider intensity-invariant preprocessing if consistency across photo shoots is a concern.
+
+#### Plot 2: Spatial Intensity Patterns (Heatmaps)
+
+The heatmap visualization displays where pixels are most intense within the top 4 darkest categories. For example:
+
+- **Trousers** show concentrated intensity in the center, representing the main fabric area
+- **Sneakers** display intensity patterns reflective of the shoe's silhouette
+- **Coats** show full-image intensity distribution, indicating overall dark coloring
+
+These spatial patterns suggest that the model could be using not just average darkness, but **spatial distribution of intensity** as a discriminative feature.
+
+**Business Insight**: If the client's product photography changes (e.g., switching to lighter backgrounds or different lighting), these spatial intensity patterns will shift, potentially degrading model performance. This highlights the importance of maintaining consistent photography standards.
+
+#### Plot 3: Feature Variance (Within-Category Consistency)
+
+This plot measures how consistent items are within each category. Categories with **high variance** have items with diverse pixel patterns (less uniform appearance), while **low variance** categories have more consistent visual characteristics.
+
+Key observations:
+
+- **Sandals** show high variance: individual sandals come in different styles, colors, and designs, creating diverse pixel patterns even within the same category.
+- **Trousers** show moderate variance: most pants have similar structure, but variations in fit and design create some diversity.
+- **T-shirts/Tops** show the highest variance: this category is inherently diverse (crop tops, long sleeves, oversized styles, etc.).
+
+**Business Insight**: High-variance categories (like T-shirts/Tops and Sandals) are inherently harder to classify because items within the category don't look similar to each other. This explains why these categories might have lower model accuracy. The client could address this by either: (1) subdividing these categories into more specific types, or (2) collecting more training examples to capture the diversity.
+
+#### Plot 4: Intensity Distribution Box Plot
+
+This visualization shows the spread and outliers of average pixel intensity for each item in a category:
+
+- Categories with **narrow boxes** are visually consistent and homogeneous
+- Categories with **wide boxes and outliers** contain diverse items
+
+For instance, **Boots/Ankle boots** likely show a tight distribution (consistent color and structure), while **Bags** show wide variation (different bag types, colors, and orientations).
+
+**Business Insight**: Outliers in these distributions represent "unusual" items within their category, these are the challenging cases that models struggle with. The client could use this information to audit the dataset and decide whether outliers should be reclassified, preprocessed differently, or simply accepted as natural product diversity.
+
+#### Plot 5: Intensity-Variance Trade-off
+
+This scatter plot simultaneously shows each category's average intensity and within-category variance:
+
+- **Upper-right quadrant** (Dark & Varied): Categories that are both dark AND diverse (likely challenging to classify)
+- **Upper-left quadrant** (Dark & Consistent): Dark items that look similar to each other
+- **Lower-right quadrant** (Light & Varied): Light, diverse items
+- **Lower-left quadrant** (Light & Consistent): Light items with consistent appearance
+
+**Business Insight**: Categories in the upper-right (Dark & Varied, like Trousers or Sneakers) present the most classification challenge because models must distinguish between very similar-looking items. Categories in the lower-left (Light & Consistent, like Sandals) are likely easier to classify because they're visually distinct and consistent.
+
+
+---
+
+### Conclusion
+
+This additional analysis demonstrates that understanding the underlying characteristics of image data, beyond just model accuracy metrics, provides valuable business insights. The pixel intensity analysis revealed how product types have inherent visual signatures, and that classification difficulty partly stems from genuine product diversity rather than model limitations. These insights should inform both technical decisions (preprocessing, augmentation, model architecture) and business decisions (photography standards, category definitions, quality control).
+
+

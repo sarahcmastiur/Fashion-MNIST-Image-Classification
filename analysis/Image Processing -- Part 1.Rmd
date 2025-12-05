@@ -1,1 +1,375 @@
+---
+title: "Data Science Consulting:  Midterm Team Project -- Part 1"
+author: "Kelsey Chen, Sarah Mastiur, Mia Xue"
+date: "Nov 5 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+set.seed(72)
+knitr::opts_chunk$set(echo = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55))
+knitr::opts_knit$set(root.dir = "/Users/kelsey/Desktop/APAN5902GP5")
+
+```
+
+```{r libraries, echo = FALSE}
+library(data.table)
+library(DT)
+library(nnet)
+library(glmnet)
+
+library(caret)
+library(randomForest)
+library(gbm)
+
+library(e1071)
+library(class)
+#install.packages("h2o")
+library(h2o)
+```
+
+```{r source_files}
+source("R/functions_kelsey.R")
+source("R/functions_sarah.R")
+source("R/functions_mia.R")
+```
+
+```{r functions}
+
+```
+
+```{r constants}
+data_path <- "Data"
+results_path <- "Results"
+if (!dir.exists(results_path)) dir.create(results_path)
+total_train_rows <- 60000
+
+trainsplit = 0.75
+
+```
+
+```{r load_data}
+
+dat_500_1 = fread("Data/dat_500_1.csv")
+dat_500_2 = fread("Data/dat_500_2.csv")
+dat_500_3 = fread("Data/dat_500_3.csv")
+
+dat_1000_1 = fread("Data/dat_1000_1.csv")
+dat_1000_2 = fread("Data/dat_1000_2.csv")
+dat_1000_3 = fread("Data/dat_1000_3.csv")
+
+dat_2000_1 = fread("Data/dat_2000_1.csv")
+dat_2000_2 = fread("Data/dat_2000_2.csv")
+dat_2000_3 = fread("Data/dat_2000_3.csv")
+
+datasets = list(dat_500_1, dat_500_2, dat_500_3,
+dat_1000_1, dat_1000_2, dat_1000_3,
+dat_2000_1, dat_2000_2, dat_2000_3)
+
+train_set = fread("Data/MNIST-fashion training set-49.csv")
+test_set = fread("Data/MNIST-fashion testing set-49.csv")
+
+original_train_nrow = nrow(train_set)
+
+```
+
+```{r clean_data}
+
+```
+
+```{r generate_samples}
+
+```
+
+## Introduction {.tabset}
+
+The goal of this project is to build and compare different machine learning models that can recognize clothing items from the Fashion-MNIST dataset. Each image in the dataset shows one of ten types of clothing or accessories, and our task is to predict the correct category based on the pixel values. The dataset is a great test case because it’s large enough to show meaningful differences between models, but still manageable to work with.
+
+We tried ten models in total, covering several major types of algorithms. These include regression-based models like Multinomial Logistic, Ridge, and Lasso; tree-based models such as Random Forest and Gradient Boosted Machines; and others like Support Vector Machines, Neural Networks, and K-Nearest Neighbors. Each model was trained on multiple random samples of different sizes (500, 1000, and 2000 rows) to see how performance changes with more data.
+
+The main goal was to compare how well each model performs in terms of accuracy, speed, and overall efficiency. By running all models under the same conditions, we can see their strengths, weaknesses, and how they handle the trade-off between accuracy and runtime. The results are summarized in a final scoreboard that shows how each model performed on average across the different samples.
+
+### Model 1: multinomial Logistic Regression
+
+Multinomial logistic regression is an extension of binary logistic regression that can predict outcomes with more than two classes. In this project, it estimates the probability that each Fashion-MNIST image belongs to one of ten categories based on pixel intensity values. This model was selected as a simple, interpretable baseline for multiclass classification. It works by modeling the log-odds of each class as a linear combination of the input predictors. Its advantages are interpretability, relatively fast computation, and robustness with smaller datasets. However, its linear decision boundaries limit its ability to capture complex, non-linear relationships between pixels.
+
+```{r code_model1_development, eval = FALSE}
+
+results_multinom <- evaluate_multinom(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_multinom, "Results/results_multinom.rds")
+
+```
+
+```{r load_model1, eval = TRUE}
+
+results_multinom <- readRDS("Results/results_multinom.rds")
+head(results_multinom)
+str(results_multinom)
+
+```
+
+### Model 2: Ridge Regression
+
+Ridge regression, also known as L2-regularized logistic regression, adds a penalty term to the loss function proportional to the square of the model coefficients. This helps prevent overfitting by shrinking large weights, especially when predictors are correlated. It was chosen because it stabilizes the model when many features are correlated — a common situation in image data. Ridge regression produces smooth, balanced weight estimates and maintains all features in the model. However, it does not perform feature selection and may still struggle with non-linear separability in the data.
+
+```{r code_model2_development, eval = FALSE}
+results_ridge <- evaluate_ridge(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_ridge, "Results/results_ridge.rds")
+```
+
+```{r load_model2, eval = TRUE}
+results_ridge <- readRDS("Results/results_ridge.rds")
+head(results_ridge)
+str(results_ridge)
+```
+
+### Model 3: Lasso Regression
+
+Lasso regression (L1-regularized logistic regression) was selected because it not only mitigates overfitting but also performs feature selection by driving some coefficients exactly to zero. This is particularly useful for image classification, where some pixels may carry redundant or non-informative signals. Lasso encourages sparsity in the model, improving interpretability and efficiency. However, its main disadvantage is that it can be unstable when highly correlated predictors compete — in such cases, it may arbitrarily retain one and discard others. Despite that, it’s an effective method for simplifying high-dimensional data like images.
+
+```{r code_model3_development, eval = FALSE}
+results_lasso <- evaluate_lasso(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_lasso, "Results/results_lasso.rds")
+
+```
+
+```{r load_model3, eval = TRUE}
+results_lasso <- readRDS("Results/results_lasso.rds")
+head(results_lasso)
+str(results_lasso)
+
+```
+
+### Model 4:Random Forest: Parameter 1
+
+Random Forest is an ensemble learning algorithm that builds multiple decision trees and aggregates their predictions to make robust classifications. By randomly sampling features and observations at each split, Random Forest reduces overfitting and improves generalization compared to single decision trees.
+
+In this project, the model was implemented using the randomForest() function from the randomForest package with parameters ntree = 1000. These settings mean that the model builds 1000 independent decision trees, each trained on a random subset of the 49 pixel features and training samples. The final classification is determined by majority voting across all trees, allowing the ensemble to capture complex patterns while maintaining robustness to noise in the pixel data.
+
+```{r code_model4_development, eval = FALSE}
+results_rf <- evaluate_rf(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_rf, "Results/results_rf.rds")
+
+```
+
+```{r load_model4, eval = TRUE}
+results_rf <- readRDS("Results/results_rf.rds")
+
+head(results_rf)
+str(results_rf)
+
+```
+
+### Model 5: Random Forest: Parameter 2
+
+Tuned Random Forest extends the basic Random Forest approach by optimizing the mtry hyperparameter, which is the number of features randomly considered at each split. While the default mtry is often effective, tuning this parameter can improve both accuracy and computational efficiency by finding the optimal balance between model complexity and generalization.
+
+In this project, the model was implemented using the randomForest() function with hyperparameter tuning performed via 5-fold cross-validation through the caret package. The mtry parameter was systematically tested across all possible values (1 to 48), and the value that minimized cross-validation error was selected for the final model trained with ntree = 1000. 
+
+```{r code_model5_development, eval = FALSE}
+results_rf_tuned <- evaluate_rf_tuned(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_rf_tuned, "Results/results_rf_tuned.rds")
+
+```
+
+```{r load_model5, eval = TRUE}
+results_rf_tuned <- readRDS("Results/results_rf_tuned.rds")
+
+head(results_rf_tuned)
+str(results_rf_tuned)
+
+```
+
+### Model 6:Generalized Boosted Regression Models: Parameter 1
+
+Gradient Boosting Machine (GBM) is a powerful ensemble method that builds trees sequentially, where each new tree learns to correct the errors made by the previous ensemble. Unlike Random Forest which trains trees independently, GBM's sequential nature allows it to focus on difficult-to-classify samples, often achieving superior predictive accuracy at the cost of increased computational time.
+
+In this project, the model was implemented using the gbm() function from the gbm package with parameters n.trees = 500, interaction.depth = 2, and shrinkage = 0.01. These settings define a model that builds 500 sequential trees with limited depth (2 levels), allowing each tree to capture simple, interpretable interactions between pixel features. The shrinkage parameter of 0.01 implements a slow learning rate, ensuring that each tree contributes conservatively to the ensemble and reducing the risk of overfitting to the training data.
+
+```{r code_model6_development, eval = FALSE}
+results_gbm <- evaluate_gbm(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_gbm, "Results/results_gbm.rds")
+
+```
+
+```{r load_model6, eval = TRUE}
+results_gbm <- readRDS("Results/results_gbm.rds")
+
+head(results_gbm)
+str(results_gbm)
+
+
+```
+
+### Model 7:Generalized Boosted Regression Models: Parameter 2
+
+Tuned Gradient Boosting Machine extends the basic GBM approach by optimizing multiple hyperparameters including interaction depth, shrinkage, and minimum observations per node. Careful tuning of these parameters can significantly enhance model performance by finding the optimal trade-off between model complexity, learning speed, and regularization.
+
+In this project, the model was implemented using the gbm() function with hyperparameter tuning performed via 3-fold cross-validation through the caret package. The tuning process systematically evaluated combinations of interaction.depth (2 to 3), shrinkage (0.01 to 0.05), and n.minobsinnode (10), selecting the combination that minimized cross-validation error. The final Tuned GBM model was then trained with n.trees = 500 using the optimal parameters.
+
+```{r code_model7_development, eval = FALSE}
+results_gbm_tuned <- evaluate_gbm_tuned(test_data = test_set)
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_gbm_tuned, "Results/results_gbm_tuned.rds")
+
+```
+
+```{r load_model7, eval = TRUE}
+results_gbm_tuned <- readRDS("Results/results_gbm_tuned.rds")
+
+head(results_gbm_tuned)
+str(results_gbm_tuned)
+
+```
+
+### Model 8:Support Vector Machines
+
+Support Vector Machine (SVM) is an important supervised machine learning algorithm that is well-suited for high-dimensional datasets. In this project, each sample has 49 pixel values, which makes it a moderately high-dimensional classification task.\
+
+The model was applied using the svm() function from the e1071 package with a linear kernel and a cost parameter of 1. This cost value allows the model to tolerate a small number of misclassifications in order to maintain a wider margin, thereby reducing the risk of overfitting and improving generalization to unseen data.
+
+```{r code_model8_development, eval = FALSE}
+results_svm = evaluate_svm(test_data = test_set) #testing dataset nameing 
+
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_svm, "Results/results_svm.rds")
+
+```
+
+```{r load_model8, eval = TRUE}
+results_svm <- readRDS("Results/results_svm.rds")
+
+head(results_svm)
+str(results_svm)
+
+```
+
+### Model 9:Neural Networks
+
+Neural Network (NN) is an essential machine learning algorithm that can automatically learn complex, nonlinear patterns in data. It is structured into three main layers: an input layer, one or more hidden (processing) layers, and an output layer.\
+
+In this project, the model was implemented using the nnet() function from the **nnet** package with parameters size = 10, maxit = 200, and trace = FALSE. These settings mean that the model contains 10 hidden neurons and is trained for up to 200 iterations, allowing it to gradually learn and refine the patterns to accurately classify the 49-pixel images.
+
+```{r code_model9_development, eval = FALSE}
+results_nn = evaluate_neural_networks(test_data = test_set)
+
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_nn, "Results/results_neural_networks.rds")
+
+```
+
+```{r load_model9, eval = TRUE}
+results_nn <- readRDS("Results/results_neural_networks.rds")
+head(results_nn)
+str(results_nn)
+
+```
+
+### Model 10: K-Nearest Neighbors
+
+K-Nearest Neighbors (KNN) is a simple yet powerful machine learning algorithm.It was implemented using the knn() function from the class package with k = 5, meaning that the model classifies each sample by calculating the Euclidean distance between the test image and all training images, selecting the five most similar ones, and assigning the label that appears most frequently among them.
+
+KNN is well-suited for the moderate-scale dataset in this project. Although its computational cost increases with larger datasets(distances must be computed for every new sample), it remains a practical and easy-to-understand classification method that provides a clear baseline for image recognition tasks.
+
+```{r code_model10_development, eval = FALSE}
+results_knn = evaluate_knn(test_data = test_set)
+
+if (!dir.exists("Results")) dir.create("Results")
+saveRDS(results_knn, "Results/results_k_nearest_neighbors.rds")
+
+```
+
+```{r load_model10, eval = TRUE}
+results_knn <- readRDS("Results/results_k_nearest_neighbors.rds")
+head(results_knn)
+str(results_knn)
+```
+
+## Scoreboard
+
+```{r scoreboard}
+
+
+scoreboard_kelsey <- fread("Results/scoreboard_regression.csv")
+scoreboard_sarah      <- fread("Results/scoreboard_sarah.csv")
+scoreboard_mia     <- fread("Results/scoreboard_mia.csv")
+
+
+scoreboard_all <- rbindlist(list(
+scoreboard_kelsey,
+scoreboard_sarah,
+scoreboard_mia
+), use.names = TRUE, fill = TRUE)
+
+setorder(scoreboard_all, Points)
+
+scoreboard_all[, Row := seq_len(.N)]
+
+fwrite(scoreboard_all, "Results/scoreboard_all.csv")
+
+#generate the final 30 row scoreboard:
+
+scoreboard_all <- fread("Results/scoreboard_all.csv")
+
+#extract the base model name (e.g. "ridge1" to "ridge")
+scoreboard_all[, Model := gsub("[0-9]+$", "", model)]
+
+scoreboard_final <- scoreboard_all[
+  , .(
+      A = round(mean(A, na.rm = TRUE), 4),
+      B = round(mean(B, na.rm = TRUE), 4),
+      C = round(mean(C, na.rm = TRUE), 4),
+      Points = round(mean(Points, na.rm = TRUE), 4)
+    ),
+  by = .(Model, sample_size)
+]
+
+#sort by points by increasing order
+setorder(scoreboard_final, Points)
+
+scoreboard_final[, Row := seq_len(.N)]
+setcolorder(scoreboard_final, c("Row", "Model", "sample_size", "A", "B", "C", "Points"))
+
+fwrite(scoreboard_final, "Results/scoreboard_final.csv")
+print(scoreboard_final)
+
+```
+
+## Discussion
+
+The final scoreboard shows clear differences in how each model balanced accuracy and efficiency. The Random Forest and Support Vector Machine (SVM) models achieved the lowest total Points, around 0.16, indicating strong accuracy (C ≈ 0.18–0.20) and manageable runtimes. These models consistently performed well across all sample sizes, making them the most reliable overall.
+
+The Gradient Boosted Machine (GBM) and Neural Network (NN) models followed closely, with Points near 0.17–0.18, showing solid predictive power but slightly longer runtimes due to their complexity. In contrast, simpler models like Ridge, Lasso, and Multinomial Logistic Regression trained faster (low B, around 0.05–0.1) but had higher misclassification rates (C ≈ 0.22–0.24), resulting in moderate total scores.
+
+Meanwhile, K-Nearest Neighbors (KNN) performed the weakest, with higher Points (≈0.19–0.20) driven by slower computations and more classification errors (C ≈ 0.25). Overall, larger sample sizes generally improved accuracy but increased runtime. These results suggest that Random Forest and SVM offer the best trade-off between speed and accuracy, making them strong candidates for more advanced modeling in future stages of the project.
+
+## Model Development Responsibilities
+
+For the 10 models, please list the names of the developers along with percentages for how the responsibilities were divided.
+
+1.  Multinomial logistic regression (done by Kelsey)
+
+2.  Ridge regression (done by Kelsey)
+
+3.  Lasso regression (done by Kelsey)
+
+4.  Random Forest: Parameter 1 (done by Sarah)
+
+5.  Random Forest: Parameter 2 (done by Sarah)
+
+6.  Generalized Boosted Regression Models: Parameter 1 (done by Sarah)
+
+7.  Generalized Boosted Regression Models: Parameter 2 (done by Sarah)
+
+8.  Support Vector Machines (done by Mia)
+
+9.  Neural Networks (done by Mia) 
+
+10. K-Nearest Neighbors(done by Mia)
 
